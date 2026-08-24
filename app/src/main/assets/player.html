@@ -29,17 +29,12 @@
 </head>
 <body>
 
-  <!--
-    DANH SÃCH VIDEO Cá» Äá»ŠNH â€” CHá»ˆ Sá»¬A á»ž ÄÃ‚Y
-    Láº¥y videoId tá»« URL youtube.com/watch?v=XXXXXXXX  (XXXXXXXX chÃ­nh lÃ  id)
-  -->
   <div id="grid"></div>
-
-  <button id="backBtn" onclick="goBack()">â† Quay láº¡i</button>
+  <button id="backBtn" onclick="goBack()">&#8592; Quay lai</button>
   <div id="player-wrap"><div id="player"></div></div>
 
   <script>
-        const PLAYLIST = [
+    const PLAYLIST = [
       { id: "XqZsoesa55w", title: "Baby Shark Dance - Pinkfong" },
       { id: "e_04ZrNroTo", title: "Wheels on the Bus - Cocomelon" },
       { id: "lBCOzDvQJ-w", title: "Johny Johny Yes Papa - LooLoo Kids" },
@@ -47,6 +42,10 @@
       { id: "TXo6QKUEGVQ", title: "Old MacDonald Had a Farm - Cocomelon" },
       { id: "JqjV_mTdBgA", title: "Bath Song - Cocomelon" }
     ];
+
+    // --- CAU HINH SKIP INTRO / OUTRO ---
+    const INTRO_SKIP_SEC = 4;   // Bo qua N giay dau moi video (intro)
+    const OUTRO_SKIP_SEC = 10;  // Chuyen video truoc khi ket thuc N giay (outro)
 
     const grid = document.getElementById('grid');
     PLAYLIST.forEach((v, i) => {
@@ -62,33 +61,36 @@
 
     let player;
     let ytApiReady = false;
+    let currentIndex = 0;
+    let outroTimer = null;
 
     function onYouTubeIframeAPIReady() {
       ytApiReady = true;
     }
 
     function playVideo(index) {
+      currentIndex = index;
       document.getElementById('grid').style.display = 'none';
       document.getElementById('player-wrap').style.display = 'block';
       document.getElementById('backBtn').style.display = 'block';
 
       const startPlaylist = () => {
         if (player) {
-          player.loadVideoById(PLAYLIST[index].id);
+          player.loadVideoById(PLAYLIST[currentIndex].id);
           return;
         }
         player = new YT.Player('player', {
-          videoId: PLAYLIST[index].id,
+          videoId: PLAYLIST[currentIndex].id,
           playerVars: {
             autoplay: 1,
             controls: 1,
-            rel: 0,          // háº¡n cháº¿ gá»£i Ã½ video ngoÃ i kÃªnh
+            rel: 0,
             modestbranding: 1,
-            fs: 0,            // táº¯t nÃºt fullscreen riÃªng (app Ä‘Ã£ fullscreen)
+            fs: 0,
             playsinline: 1,
             origin: 'https://www.youtube.com'
           },
-                    events: {
+          events: {
             onStateChange: onPlayerStateChange,
             onError: onPlayerError
           }
@@ -99,26 +101,56 @@
       else setTimeout(startPlaylist, 500);
     }
 
-    // Khi video káº¿t thÃºc -> tá»± chuyá»ƒn video TIáº¾P THEO TRONG DANH SÃCH Cá» Äá»ŠNH
-    // (khÃ´ng rÆ¡i vÃ o gá»£i Ã½ random cá»§a YouTube)
-    let currentIndex = 0;
+    function nextVideo() {
+      clearInterval(outroTimer);
+      currentIndex = (currentIndex + 1) % PLAYLIST.length;
+      player.loadVideoById(PLAYLIST[currentIndex].id);
+    }
+
     function onPlayerStateChange(e) {
+      if (e.data === YT.PlayerState.PLAYING) {
+        // Skip intro: seek qua INTRO_SKIP_SEC giay dau
+        if (INTRO_SKIP_SEC > 0) {
+          const t = player.getCurrentTime();
+          if (t < INTRO_SKIP_SEC) {
+            player.seekTo(INTRO_SKIP_SEC, true);
+          }
+        }
+
+        // Outro timer: poll moi giay, chuyen video truoc khi ket thuc
+        clearInterval(outroTimer);
+        if (OUTRO_SKIP_SEC > 0) {
+          outroTimer = setInterval(function() {
+            const duration = player.getDuration();
+            const current  = player.getCurrentTime();
+            if (duration > 0 && current >= duration - OUTRO_SKIP_SEC) {
+              nextVideo();
+            }
+          }, 1000);
+        }
+      }
+
+      // Video ket thuc binh thuong (fallback)
       if (e.data === YT.PlayerState.ENDED) {
-        currentIndex = (currentIndex + 1) % PLAYLIST.length;
-        player.loadVideoById(PLAYLIST[currentIndex].id);
+        nextVideo();
+      }
+
+      // Dung timer khi pause / buffer
+      if (e.data === YT.PlayerState.PAUSED ||
+          e.data === YT.PlayerState.BUFFERING) {
+        clearInterval(outroTimer);
       }
     }
 
     // Tu dong skip khi gap loi embedding (150/151/152/153/154)
     function onPlayerError(e) {
-      console.warn('YouTube error code:', e.data, '-- skipping to next video');
-      currentIndex = (currentIndex + 1) % PLAYLIST.length;
-      setTimeout(function() {
-        player.loadVideoById(PLAYLIST[currentIndex].id);
-      }, 1000);
+      console.warn('YouTube error:', e.data, '-- skipping');
+      clearInterval(outroTimer);
+      setTimeout(nextVideo, 1000);
     }
 
     function goBack() {
+      clearInterval(outroTimer);
       if (player) player.stopVideo();
       document.getElementById('player-wrap').style.display = 'none';
       document.getElementById('backBtn').style.display = 'none';

@@ -1,8 +1,11 @@
 ﻿package com.anhem.kidstube
 
 import android.app.AlertDialog
+import android.app.PictureInPictureParams
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -29,7 +32,7 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             domStorageEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
-            // Gia mao Chrome desktop UA de YouTube cho phep embed
+            // Spoof Chrome desktop UA de YouTube cho phep embed
             userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                 "AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/124.0.0.0 Safari/537.36"
@@ -48,7 +51,7 @@ class MainActivity : AppCompatActivity() {
             null
         )
 
-        // Long-press 3 lan lien tiep -> hien PIN phu huynh
+        // Long-press 3 lan -> hien PIN phu huynh
         webView.setOnLongClickListener {
             backPressCount++
             if (backPressCount >= 3) {
@@ -56,6 +59,38 @@ class MainActivity : AppCompatActivity() {
                 showParentGate()
             }
             true
+        }
+    }
+
+    // Khi nguoi dung bam Home/Recents -> tu dong vao PiP
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        enterPipMode()
+    }
+
+    private fun enterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+            enterPictureInPictureMode(params)
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        // An nut Back khi vao PiP, hien lai khi thoat PiP
+        val backBtn = webView.findViewWithTag<View>("backBtn")
+        if (isInPictureInPictureMode) {
+            // Trong PiP: an het UI overlay, chi con video
+            webView.evaluateJavascript(
+                "document.getElementById('backBtn').style.display='none'", null
+            )
+        } else {
+            hideSystemBars()
         }
     }
 
