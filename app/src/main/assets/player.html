@@ -13,9 +13,7 @@
       padding: 16px;
       box-sizing: border-box;
     }
-    .card {
-      background:#222; border-radius:12px; overflow:hidden; cursor:pointer;
-    }
+    .card { background:#222; border-radius:12px; overflow:hidden; cursor:pointer; }
     .card img { width:100%; display:block; }
     .card .title { color:#fff; font-size:14px; padding:8px; }
     #player-wrap { position:fixed; top:0; left:0; width:100%; height:100%; display:none; background:#000; }
@@ -30,32 +28,35 @@
 <body>
 
   <div id="grid"></div>
-  <button id="backBtn" onclick="goBack()">&#8592; Quay lai</button>
+  <button id="backBtn" onclick="goBack()">&#8592; Back</button>
   <div id="player-wrap"><div id="player"></div></div>
 
   <script>
+    // --- DANH SACH VIDEO ---
+    // Super Simple Songs: channel noi tieng CHO PHEP EMBED
+    // Thay bang videoId cua rieng ban neu muon
     const PLAYLIST = [
-      { id: "XqZsoesa55w", title: "Baby Shark Dance - Pinkfong" },
-      { id: "e_04ZrNroTo", title: "Wheels on the Bus - Cocomelon" },
-      { id: "lBCOzDvQJ-w", title: "Johny Johny Yes Papa - LooLoo Kids" },
+      { id: "XqZsoesa55w", title: "Baby Shark - Pinkfong" },
+      { id: "yCjJyiqpAuU", title: "Twinkle Twinkle Little Star - Super Simple Songs" },
+      { id: "l4WNrvVjiTw", title: "The Wheels on the Bus - Super Simple Songs" },
       { id: "PoJBdOC6cLQ", title: "Five Little Monkeys - Super Simple Songs" },
-      { id: "TXo6QKUEGVQ", title: "Old MacDonald Had a Farm - Cocomelon" },
-      { id: "JqjV_mTdBgA", title: "Bath Song - Cocomelon" }
+      { id: "e_04ZrNroTo", title: "Baa Baa Black Sheep - Super Simple Songs" },
+      { id: "tpMH10dMoNY", title: "Old MacDonald Had a Farm - Super Simple Songs" }
     ];
 
-    // --- CAU HINH SKIP INTRO / OUTRO ---
-    const INTRO_SKIP_SEC = 4;   // Bo qua N giay dau moi video (intro)
-    const OUTRO_SKIP_SEC = 10;  // Chuyen video truoc khi ket thuc N giay (outro)
+    // --- CAU HINH ---
+    const INTRO_SKIP_SEC = 4;   // Bo qua N giay dau (intro)
+    const OUTRO_SKIP_SEC = 10;  // Chuyen video khi con N giay (outro)
 
+    // Build grid
     const grid = document.getElementById('grid');
     PLAYLIST.forEach((v, i) => {
       const card = document.createElement('div');
       card.className = 'card';
       card.onclick = () => playVideo(i);
-      card.innerHTML = `
-        <img src="https://img.youtube.com/vi/${v.id}/mqdefault.jpg">
-        <div class="title">${v.title}</div>
-      `;
+      card.innerHTML =
+        '<img src="https://img.youtube.com/vi/' + v.id + '/mqdefault.jpg">' +
+        '<div class="title">' + v.title + '</div>';
       grid.appendChild(card);
     });
 
@@ -74,31 +75,34 @@
       document.getElementById('player-wrap').style.display = 'block';
       document.getElementById('backBtn').style.display = 'block';
 
-      const startPlaylist = () => {
+      const start = function() {
         if (player) {
           player.loadVideoById(PLAYLIST[currentIndex].id);
           return;
         }
         player = new YT.Player('player', {
           videoId: PLAYLIST[currentIndex].id,
+          // FIX CHINH: dung youtube-nocookie.com -- it bi chan embed hon nhieu
+          host: 'https://www.youtube-nocookie.com',
           playerVars: {
-            autoplay: 1,
-            controls: 1,
-            rel: 0,
+            autoplay:       1,
+            controls:       1,
+            rel:            0,
             modestbranding: 1,
-            fs: 0,
-            playsinline: 1,
-            origin: 'https://www.youtube.com'
+            fs:             0,
+            playsinline:    1,
+            enablejsapi:    1,
+            origin:         'https://www.youtube.com'
           },
           events: {
             onStateChange: onPlayerStateChange,
-            onError: onPlayerError
+            onError:       onPlayerError
           }
         });
       };
 
-      if (ytApiReady) startPlaylist();
-      else setTimeout(startPlaylist, 500);
+      if (ytApiReady) start();
+      else setTimeout(start, 500);
     }
 
     function nextVideo() {
@@ -109,44 +113,32 @@
 
     function onPlayerStateChange(e) {
       if (e.data === YT.PlayerState.PLAYING) {
-        // Skip intro: seek qua INTRO_SKIP_SEC giay dau
-        if (INTRO_SKIP_SEC > 0) {
-          const t = player.getCurrentTime();
-          if (t < INTRO_SKIP_SEC) {
-            player.seekTo(INTRO_SKIP_SEC, true);
-          }
+        // Skip intro
+        if (INTRO_SKIP_SEC > 0 && player.getCurrentTime() < INTRO_SKIP_SEC) {
+          player.seekTo(INTRO_SKIP_SEC, true);
         }
-
-        // Outro timer: poll moi giay, chuyen video truoc khi ket thuc
+        // Outro polling
         clearInterval(outroTimer);
         if (OUTRO_SKIP_SEC > 0) {
           outroTimer = setInterval(function() {
-            const duration = player.getDuration();
-            const current  = player.getCurrentTime();
-            if (duration > 0 && current >= duration - OUTRO_SKIP_SEC) {
-              nextVideo();
-            }
+            var dur = player.getDuration();
+            var cur = player.getCurrentTime();
+            if (dur > 0 && cur >= dur - OUTRO_SKIP_SEC) nextVideo();
           }, 1000);
         }
       }
-
-      // Video ket thuc binh thuong (fallback)
-      if (e.data === YT.PlayerState.ENDED) {
-        nextVideo();
-      }
-
-      // Dung timer khi pause / buffer
+      if (e.data === YT.PlayerState.ENDED) nextVideo();
       if (e.data === YT.PlayerState.PAUSED ||
           e.data === YT.PlayerState.BUFFERING) {
         clearInterval(outroTimer);
       }
     }
 
-    // Tu dong skip khi gap loi embedding (150/151/152/153/154)
+    // Auto-skip neu video bi chan embed
     function onPlayerError(e) {
-      console.warn('YouTube error:', e.data, '-- skipping');
+      console.warn('YouTube error ' + e.data + ' -- auto-skip');
       clearInterval(outroTimer);
-      setTimeout(nextVideo, 1000);
+      setTimeout(nextVideo, 800);
     }
 
     function goBack() {
