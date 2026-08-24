@@ -10,7 +10,6 @@ import android.webkit.WebView
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 
-// Doi ma PIN nay thanh ma cua ban -- dung de phu huynh thoat app
 private const val PARENT_PIN = "123123"
 
 class MainActivity : AppCompatActivity() {
@@ -25,15 +24,22 @@ class MainActivity : AppCompatActivity() {
         setContentView(webView)
         hideSystemBars()
 
-        webView.settings.javaScriptEnabled = true
-        webView.settings.mediaPlaybackRequiresUserGesture = false
-        webView.settings.domStorageEnabled = true
-        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+        webView.settings.apply {
+            javaScriptEnabled = true
+            mediaPlaybackRequiresUserGesture = false
+            domStorageEnabled = true
+            cacheMode = WebSettings.LOAD_DEFAULT
+            // Gia mao Chrome desktop UA de YouTube cho phep embed
+            userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/124.0.0.0 Safari/537.36"
+        }
         webView.webChromeClient = WebChromeClient()
 
-        // Fix YouTube Error 153: load voi base URL la https://www.youtube.com
-        // thay vi file:// de YouTube IFrame API chap nhan embed
-        val html = assets.open("player.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+        // Fix Error 153: load voi base URL https://www.youtube.com
+        val html = assets.open("player.html")
+            .bufferedReader(Charsets.UTF_8)
+            .use { it.readText() }
         webView.loadDataWithBaseURL(
             "https://www.youtube.com",
             html,
@@ -42,7 +48,7 @@ class MainActivity : AppCompatActivity() {
             null
         )
 
-        // Long-press 3 lan lien tiep -> hien hop thoai nhap PIN phu huynh
+        // Long-press 3 lan lien tiep -> hien PIN phu huynh
         webView.setOnLongClickListener {
             backPressCount++
             if (backPressCount >= 3) {
@@ -68,10 +74,9 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // Chan nut Back he thong -- tre khong thoat ra ngoai duoc
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        // khong goi super -> nut back bi vo hieu hoa ben trong app
+        // Nut Back bi vo hieu hoa -- tre khong thoat ra ngoai duoc
     }
 
     private fun hideSystemBars() {

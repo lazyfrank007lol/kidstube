@@ -88,8 +88,9 @@
             playsinline: 1,
             origin: 'https://www.youtube.com'
           },
-          events: {
-            onStateChange: onPlayerStateChange
+                    events: {
+            onStateChange: onPlayerStateChange,
+            onError: onPlayerError
           }
         });
       };
@@ -106,6 +107,15 @@
         currentIndex = (currentIndex + 1) % PLAYLIST.length;
         player.loadVideoById(PLAYLIST[currentIndex].id);
       }
+    }
+
+    // Tu dong skip khi gap loi embedding (150/151/152/153/154)
+    function onPlayerError(e) {
+      console.warn('YouTube error code:', e.data, '-- skipping to next video');
+      currentIndex = (currentIndex + 1) % PLAYLIST.length;
+      setTimeout(function() {
+        player.loadVideoById(PLAYLIST[currentIndex].id);
+      }, 1000);
     }
 
     function goBack() {
