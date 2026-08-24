@@ -6,110 +6,51 @@
   <title>KidsTube</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { background: #111; height: 100%; overflow: hidden; font-family: sans-serif; }
+    html, body { background: #111; height: 100%; font-family: sans-serif; overflow-y: auto; }
+    h1 { color: #fff; text-align: center; padding: 16px 0 8px; font-size: 20px; }
     #grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 12px;
-      padding: 16px;
-      height: 100%;
-      align-content: start;
-      overflow-y: auto;
+      padding: 12px;
     }
     .card { background: #222; border-radius: 12px; overflow: hidden; cursor: pointer; }
+    .card:active { opacity: 0.7; }
     .card img { width: 100%; display: block; }
-    .card .title { color: #fff; font-size: 13px; padding: 8px; }
-    #player-wrap {
-      display: none;
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: #000;
-      flex-direction: column;
-    }
-    #player-wrap.active { display: flex; }
-    #yt-frame { flex: 1; width: 100%; border: 0; }
-    #backBtn {
-      position: fixed; top: 12px; left: 12px; z-index: 99;
-      background: rgba(0,0,0,0.65); color: #fff;
-      border: none; border-radius: 8px;
-      padding: 8px 14px; font-size: 15px; cursor: pointer;
-      display: none;
-    }
+    .card .title { color: #fff; font-size: 13px; padding: 8px; line-height: 1.3; }
   </style>
 </head>
 <body>
+  <h1>KidsTube</h1>
+  <div id="grid"></div>
 
-<div id="grid"></div>
-<button id="backBtn" onclick="goBack()">&#8592; Back</button>
-<div id="player-wrap">
-  <iframe id="yt-frame"
-    allow="autoplay; encrypted-media; picture-in-picture"
-    allowfullscreen>
-  </iframe>
-</div>
+  <script>
+    // =============================================
+    //  DANH SACH VIDEO -- sua videoId o day
+    //  Lay ID tu URL: youtube.com/watch?v=XXXXX
+    // =============================================
+    var PLAYLIST = [
+      { id: "XqZsoesa55w", title: "Baby Shark Dance - Pinkfong" },
+      { id: "yCjJyiqpAuU", title: "Twinkle Twinkle Little Star - Super Simple Songs" },
+      { id: "l4WNrvVjiTw", title: "The Wheels on the Bus - Super Simple Songs" },
+      { id: "PoJBdOC6cLQ", title: "Five Little Monkeys - Super Simple Songs" },
+      { id: "e_04ZrNroTo", title: "Old MacDonald Had a Farm - Super Simple Songs" },
+      { id: "tpMH10dMoNY", title: "Baa Baa Black Sheep - Super Simple Songs" }
+    ];
 
-<script>
-  // =============================================
-  //  DANH SACH VIDEO -- sua o day
-  //  Lay videoId tu URL youtube.com/watch?v=XXXXX
-  // =============================================
-  var PLAYLIST = [
-    { id: "XqZsoesa55w", title: "Baby Shark Dance - Pinkfong" },
-    { id: "yCjJyiqpAuU", title: "Twinkle Twinkle Little Star - Super Simple Songs" },
-    { id: "l4WNrvVjiTw", title: "The Wheels on the Bus - Super Simple Songs" },
-    { id: "PoJBdOC6cLQ", title: "Five Little Monkeys - Super Simple Songs" },
-    { id: "e_04ZrNroTo", title: "Old MacDonald Had a Farm - Super Simple Songs" },
-    { id: "tpMH10dMoNY", title: "Baa Baa Black Sheep - Super Simple Songs" }
-  ];
-
-  // Bo qua N giay dau (intro). 0 = khong skip
-  var INTRO_SKIP_SEC = 4;
-
-  // =============================================
-  //  Build thumbnail grid
-  // =============================================
-  var grid = document.getElementById('grid');
-  PLAYLIST.forEach(function(v, i) {
-    var card = document.createElement('div');
-    card.className = 'card';
-    card.onclick = function() { playVideo(i); };
-    card.innerHTML =
-      '<img src="https://img.youtube.com/vi/' + v.id + '/mqdefault.jpg" loading="lazy">' +
-      '<div class="title">' + v.title + '</div>';
-    grid.appendChild(card);
-  });
-
-  var currentIndex = 0;
-
-  function playVideo(index) {
-    currentIndex = index;
-
-    // Xay dung playlist string: bat dau tu video duoc chon, tiep theo la cac video con lai
-    var ids = PLAYLIST.map(function(v) { return v.id; });
-    var ordered = ids.slice(index).concat(ids.slice(0, index));
-
-    // Direct embed URL vao youtube-nocookie.com -- khong dung JS API
-    // -> it bi enforce embedding restriction nhat
-    var src = 'https://www.youtube-nocookie.com/embed/' + PLAYLIST[index].id
-      + '?autoplay=1'
-      + '&rel=0'
-      + '&modestbranding=1'
-      + '&playsinline=1'
-      + '&start=' + INTRO_SKIP_SEC      // skip intro
-      + '&playlist=' + ordered.join(','); // tu dong next video
-
-    document.getElementById('yt-frame').src = src;
-    document.getElementById('player-wrap').classList.add('active');
-    document.getElementById('backBtn').style.display = 'block';
-  }
-
-  function goBack() {
-    // Clear iframe truoc de dung video (tranh audio chay ngam)
-    document.getElementById('yt-frame').src = 'about:blank';
-    document.getElementById('player-wrap').classList.remove('active');
-    document.getElementById('backBtn').style.display = 'none';
-  }
-</script>
-
+    var grid = document.getElementById('grid');
+    PLAYLIST.forEach(function(v, i) {
+      var card = document.createElement('div');
+      card.className = 'card';
+      // Goi Android bridge de navigate thang den YouTube (khong dung iframe/embed)
+      card.onclick = function() {
+        Android.playVideo(v.id);
+      };
+      card.innerHTML =
+        '<img src="https://img.youtube.com/vi/' + v.id + '/mqdefault.jpg" loading="lazy">' +
+        '<div class="title">' + v.title + '</div>';
+      grid.appendChild(card);
+    });
+  </script>
 </body>
 </html>

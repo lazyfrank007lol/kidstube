@@ -7,18 +7,29 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Rational
 import android.view.View
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 
 private const val PARENT_PIN = "123123"
 
+// Domain duoc phep navigate trong WebView
+private val ALLOWED_HOSTS = listOf(
+    "youtube.com", "www.youtube.com", "m.youtube.com",
+    "youtu.be", "googlevideo.com", "ytimg.com",
+    "yt3.ggpht.com", "i.ytimg.com"
+)
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private var backPressCount = 0
+    private var isOnGrid = true   // true = dang o man hinh grid, false = dang xem video
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,26 +43,67 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             domStorageEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
-            // Spoof Chrome desktop UA de YouTube cho phep embed
-            userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+            // Chrome UA de YouTube chap nhan day du tinh nang
+            userAgentString = "Mozilla/5.0 (Linux; Android 13; Pixel 7) " +
                 "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                "Chrome/124.0.0.0 Safari/537.36"
+                "Chrome/124.0.6367.82 Mobile Safari/537.36"
         }
+
         webView.webChromeClient = WebChromeClient()
 
-        // Fix Error 153: load voi base URL https://www.youtube.com
-        val html = assets.open("player.html")
-            .bufferedReader(Charsets.UTF_8)
-            .use { it.readText() }
-        webView.loadDataWithBaseURL(
-            "https://www.youtube.com",
-            html,
-            "text/html",
-            "UTF-8",
-            null
-        )
+        // Bridge: grid HTML goi Android.playVideo(id) -> navigate thang YouTube
+        webView.addJavascriptInterface(object : Any() {
+            @JavascriptInterface
+            fun playVideo(videoId: String) {
+                runOnUiThread {
+                    isOnGrid = false
+                    // Load YouTube mobile truc tiep -- KHONG dung embed/iframe
+                    // -> khong co loi 150/152/153/154 vi day la YouTube that su
+                    webView.loadUrl("https://m.youtube.com/watch?v=$videoId&autoplay=1")
+                }
+            }
+        }, "Android")
 
-        // Long-press 3 lan -> hien PIN phu huynh
+        // Chi cho phep navigate trong YouTube -- chan moi URL khac
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean {
+                val url = request?.url?.toString() ?: return true
+                val allowed = ALLOWED_HOSTS.any { host ->
+                    url.contains(host)
+                }
+                return !allowed  // true = chan, false = cho phep
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                // Inject CSS de an cac element khong can thiet tren YouTube
+                if (url?.contains("youtube.com/watch") == true) {
+                    val css = listOf(
+                        "ytm-search-box",          // thanh search
+                        "ytm-pivot-bar-renderer",  // bottom nav bar
+                        "#header-bar",             // header
+                        ".related-chips-bar-wrapper", // goi y
+                        "ytm-notification-action-renderer"
+                    ).joinToString(",") + "{display:none!important}"
+
+                    view?.evaluateJavascript(
+                        "(function(){" +
+                        "var s=document.createElement('style');" +
+                        "s.textContent='$css';" +
+                        "document.head&&document.head.appendChild(s);" +
+                        "})()", null
+                    )
+                }
+            }
+        }
+
+        // Load grid
+        loadGrid()
+
+        // Long-press 3 lan -> PIN gate
         webView.setOnLongClickListener {
             backPressCount++
             if (backPressCount >= 3) {
@@ -62,10 +114,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Khi nguoi dung bam Home/Recents -> tu dong vao PiP
+    private fun loadGrid() {
+        isOnGrid = true
+        val html = assets.open("player.html")
+            .bufferedReader(Charsets.UTF_8)
+            .use { it.readText() }
+        webView.loadDataWithBaseURL(
+            "https://www.youtube.com",
+            html, "text/html", "UTF-8", null
+        )
+    }
+
+    // Khi bam Home/Recents -> vao PiP neu dang xem video
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        enterPipMode()
+        if (!isOnGrid) enterPipMode()
     }
 
     private fun enterPipMode() {
@@ -78,20 +141,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
+        isInPip: Boolean,
         newConfig: Configuration
     ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        // An nut Back khi vao PiP, hien lai khi thoat PiP
-        val backBtn = webView.findViewWithTag<View>("backBtn")
-        if (isInPictureInPictureMode) {
-            // Trong PiP: an het UI overlay, chi con video
-            webView.evaluateJavascript(
-                "document.getElementById('backBtn').style.display='none'", null
-            )
-        } else {
-            hideSystemBars()
-        }
+        super.onPictureInPictureModeChanged(isInPip, newConfig)
+        if (!isInPip) hideSystemBars()
     }
 
     private fun showParentGate() {
@@ -101,9 +155,7 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Thoat KidsTube")
             .setView(input)
             .setPositiveButton("OK") { _, _ ->
-                if (input.text.toString() == PARENT_PIN) {
-                    finishAffinity()
-                }
+                if (input.text.toString() == PARENT_PIN) finishAffinity()
             }
             .setNegativeButton("Huy", null)
             .show()
@@ -111,7 +163,11 @@ class MainActivity : AppCompatActivity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        // Nut Back bi vo hieu hoa -- tre khong thoat ra ngoai duoc
+        if (!isOnGrid) {
+            // Dang xem video -> quay lai grid
+            loadGrid()
+        }
+        // Neu o grid -> khong lam gi (tra em khong thoat duoc)
     }
 
     private fun hideSystemBars() {
@@ -130,7 +186,7 @@ class MainActivity : AppCompatActivity() {
                     or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                     or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                     or View.SYSTEM_UI_FLAG_FULLSCREEN
-                )
+            )
         }
     }
 
