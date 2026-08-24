@@ -19,40 +19,40 @@ import androidx.appcompat.app.AppCompatActivity
 
 private const val PARENT_PIN = "123123"
 
-// Chi cho phep dung cac videoId nay
 private val ALLOWED_VIDEO_IDS = setOf(
-    "XqZsoesa55w",  // Baby Shark - Pinkfong
-    "yCjJyiqpAuU",  // Twinkle Twinkle Little Star - SSS
-    "l4WNrvVjiTw",  // The Wheels on the Bus - SSS
-    "PoJBdOC6cLQ",  // Five Little Monkeys - SSS
-    "e_04ZrNroTo",  // Old MacDonald - SSS
-    "tpMH10dMoNY"   // Baa Baa Black Sheep - SSS
+    "XqZsoesa55w", "yCjJyiqpAuU", "l4WNrvVjiTw",
+    "PoJBdOC6cLQ", "e_04ZrNroTo", "tpMH10dMoNY"
 )
 
+// Domain duoc phep (YouTube infrastructure)
 private val ALLOWED_HOSTS = listOf(
     "youtube.com", "m.youtube.com", "www.youtube.com",
     "googlevideo.com", "ytimg.com", "yt3.ggpht.com",
     "i.ytimg.com", "youtu.be", "accounts.google.com"
 )
 
-// JS inject de mask WebView fingerprint (YouTube dung de detect WebView)
-private val MASK_WEBVIEW_JS = """
-(function() {
-    if (!window.chrome) {
-        window.chrome = { runtime: {}, app: { isInstalled: false } };
-    }
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-})();
-""".trimIndent()
+// Path YouTube bi chan (home, search, channel, shorts...)
+// KHONG dung "/" o day vi startsWith("/") match moi thu!
+private val BLOCKED_PATH_PREFIXES = listOf(
+    "/feed", "/results", "/shorts", "/@", "/channel",
+    "/playlist", "/hashtag", "/account", "/premium"
+)
 
-// CSS inject de an thanh search, nav bar, goi y khi xem video
-private val HIDE_YOUTUBE_UI_CSS = """
-ytm-search-box, #search-form, ytm-pivot-bar-renderer,
-#header-bar, .yt-core-attributed-string--link-inherit-color,
-ytm-notification-action-renderer, ytm-compact-autoplay-renderer,
-ytm-item-section-renderer:has(ytm-compact-autoplay-renderer),
-.related-chips-bar-wrapper { display: none !important; }
-""".trimIndent()
+private const val MASK_JS = """
+(function(){
+  if(!window.chrome){
+    window.chrome={runtime:{},app:{isInstalled:false}};
+  }
+  try{Object.defineProperty(navigator,'webdriver',{get:()=>undefined});}catch(e){}
+})();
+"""
+
+private const val HIDE_CSS = """
+ytm-search-box,#search-form,ytm-pivot-bar-renderer,
+#header-bar,ytm-notification-action-renderer,
+ytm-compact-autoplay-renderer,.related-chips-bar-wrapper
+{display:none!important}
+"""
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,7 +77,6 @@ class MainActivity : AppCompatActivity() {
         }
         webView.webChromeClient = WebChromeClient()
 
-        // Bridge: grid HTML -> Android.playVideo(id)
         webView.addJavascriptInterface(object : Any() {
             @JavascriptInterface
             fun playVideo(videoId: String) {
@@ -92,48 +91,55 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
 
             override fun shouldOverrideUrlLoading(
-                view: WebView?,
-                request: WebResourceRequest?
+                view: WebView?, request: WebResourceRequest?
             ): Boolean {
-                val url = request?.url?.toString() ?: return true
+                val uri = request?.url ?: return true
+                val url = uri.toString()
+                val host = uri.host ?: ""
+                val path = uri.path ?: "/"
 
-                // Cho phep cac domain YouTube infrastructure
-                val isYouTubeDomain = ALLOWED_HOSTS.any { url.contains(it) }
-                if (!isYouTubeDomain) return true // Chan
+                // Buoc 1: kiem tra domain co duoc phep khong
+                val isAllowed = ALLOWED_HOSTS.any { host.endsWith(it) }
+                if (!isAllowed) return true // Chan URL ngoai YouTube
 
-                // Neu la trang watch, kiem tra videoId co trong playlist khong
-                if (url.contains("youtube.com/watch")) {
-                    val videoId = Uri.parse(url).getQueryParameter("v")
-                    if (videoId != null && !ALLOWED_VIDEO_IDS.contains(videoId)) {
-                        // Video ngoai playlist -> quay ve grid ngay lap tuc
-                        runOnUiThread { loadGrid() }
-                        return true
+                // Buoc 2: neu la trang /watch, kiem tra videoId
+                if (path == "/watch") {
+                    val videoId = uri.getQueryParameter("v")
+                    return when {
+                        videoId == null -> false // Cho phep (chua co v param)
+                        ALLOWED_VIDEO_IDS.contains(videoId) -> false // Trong playlist -> OK
+                        else -> { // Ngoai playlist -> kick ve grid
+                            runOnUiThread { loadGrid() }
+                            true
+                        }
                     }
                 }
 
-                // Block cac trang YouTube khac (home, search, channel...)
-                val blockedPaths = listOf("/", "/feed", "/results", "/@", "/channel", "/shorts")
-                val path = Uri.parse(url).path ?: ""
-                if (blockedPaths.any { path == it || path.startsWith(it) }) {
+                // Buoc 3: chan cac trang YouTube khong mong muon
+                // Root path (trang chu YouTube)
+                if (path == "/" && host.contains("youtube.com")) {
+                    runOnUiThread { loadGrid() }
+                    return true
+                }
+                // Cac path bi chan (search, channel, shorts,...)
+                if (BLOCKED_PATH_PREFIXES.any { path.startsWith(it) }) {
                     runOnUiThread { loadGrid() }
                     return true
                 }
 
+                // Cho phep tat ca URL YouTube con lai (API calls, redirects, v.v.)
                 return false
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                // Inject JS truoc khi YouTube chay de mask WebView fingerprint
-                view?.evaluateJavascript(MASK_WEBVIEW_JS, null)
+                view?.evaluateJavascript(MASK_JS, null)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 if (url?.contains("youtube.com/watch") == true) {
-                    // An UI khong can thiet cua YouTube
-                    val escapedCss = HIDE_YOUTUBE_UI_CSS
-                        .replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ")
+                    val escapedCss = HIDE_CSS.replace("'", "\\'").replace("\n", " ")
                     view?.evaluateJavascript(
                         "(function(){var s=document.createElement('style');" +
                         "s.textContent='$escapedCss';" +
@@ -198,7 +204,6 @@ class MainActivity : AppCompatActivity() {
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         if (!isOnGrid) loadGrid()
-        // O grid -> khong lam gi, tre khong thoat duoc
     }
 
     private fun hideSystemBars() {
