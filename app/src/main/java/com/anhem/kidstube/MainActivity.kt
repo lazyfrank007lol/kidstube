@@ -10,7 +10,7 @@ import android.webkit.WebView
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 
-// Äá»•i mÃ£ PIN nÃ y thÃ nh mÃ£ cá»§a báº¡n â€” dÃ¹ng Ä‘á»ƒ phá»¥ huynh thoÃ¡t app
+// Doi ma PIN nay thanh ma cua ban -- dung de phu huynh thoat app
 private const val PARENT_PIN = "123123"
 
 class MainActivity : AppCompatActivity() {
@@ -29,12 +29,20 @@ class MainActivity : AppCompatActivity() {
         webView.settings.mediaPlaybackRequiresUserGesture = false
         webView.settings.domStorageEnabled = true
         webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-        webView.webChromeClient = WebChromeClient() // cáº§n cho fullscreen video
+        webView.webChromeClient = WebChromeClient()
 
-        webView.loadUrl("file:///android_asset/player.html")
+        // Fix YouTube Error 153: load voi base URL la https://www.youtube.com
+        // thay vi file:// de YouTube IFrame API chap nhan embed
+        val html = assets.open("player.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+        webView.loadDataWithBaseURL(
+            "https://www.youtube.com",
+            html,
+            "text/html",
+            "UTF-8",
+            null
+        )
 
-        // Long-press á»Ÿ gÃ³c trÃªn-trÃ¡i mÃ n hÃ¬nh 3 láº§n liÃªn tiáº¿p trong lÃºc app cháº¡y
-        // sáº½ má»Ÿ há»™p thoáº¡i nháº­p PIN Ä‘á»ƒ thoÃ¡t (trÃ¡nh tráº» vÃ´ tÃ¬nh báº¥m trÃºng)
+        // Long-press 3 lan lien tiep -> hien hop thoai nhap PIN phu huynh
         webView.setOnLongClickListener {
             backPressCount++
             if (backPressCount >= 3) {
@@ -47,22 +55,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun showParentGate() {
         val input = EditText(this)
-        input.hint = "Nháº­p mÃ£ PIN phá»¥ huynh"
+        input.hint = "Nhap ma PIN phu huynh"
         AlertDialog.Builder(this)
-            .setTitle("ThoÃ¡t KidsTube")
+            .setTitle("Thoat KidsTube")
             .setView(input)
             .setPositiveButton("OK") { _, _ ->
                 if (input.text.toString() == PARENT_PIN) {
                     finishAffinity()
                 }
             }
-            .setNegativeButton("Huá»·", null)
+            .setNegativeButton("Huy", null)
             .show()
     }
 
-    // Cháº·n nÃºt Back há»‡ thá»‘ng â€” tráº» khÃ´ng thoÃ¡t ra ngoÃ i Ä‘Æ°á»£c
+    // Chan nut Back he thong -- tre khong thoat ra ngoai duoc
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        // khÃ´ng gá»i super -> nÃºt back bá»‹ vÃ´ hiá»‡u hoÃ¡ bÃªn trong app
+        // khong goi super -> nut back bi vo hieu hoa ben trong app
     }
 
     private fun hideSystemBars() {
