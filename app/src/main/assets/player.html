@@ -7,7 +7,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { background: #111; height: 100%; font-family: sans-serif; overflow-y: auto; }
-    h1 { color: #fff; text-align: center; padding: 16px 0 8px; font-size: 20px; }
+    h1 { color: #fff; text-align: center; padding: 16px 0 8px; font-size: 20px; letter-spacing: 1px; }
     #grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -23,12 +23,7 @@
 <body>
   <h1>KidsTube</h1>
   <div id="grid"></div>
-
   <script>
-    // =============================================
-    //  DANH SACH VIDEO -- sua videoId o day
-    //  Lay ID tu URL: youtube.com/watch?v=XXXXX
-    // =============================================
     var PLAYLIST = [
       { id: "XqZsoesa55w", title: "Baby Shark Dance - Pinkfong" },
       { id: "yCjJyiqpAuU", title: "Twinkle Twinkle Little Star - Super Simple Songs" },
@@ -39,12 +34,12 @@
     ];
 
     var grid = document.getElementById('grid');
-    PLAYLIST.forEach(function(v, i) {
+    PLAYLIST.forEach(function(v) {
       var card = document.createElement('div');
       card.className = 'card';
-      // Goi Android bridge de navigate thang den YouTube (khong dung iframe/embed)
+      // Dung custom scheme thay vi window.Android de tranh YouTube detect WebView
       card.onclick = function() {
-        Android.playVideo(v.id);
+        window.location.href = 'kidstube://play/' + v.id;
       };
       card.innerHTML =
         '<img src="https://img.youtube.com/vi/' + v.id + '/mqdefault.jpg" loading="lazy">' +
